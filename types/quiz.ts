@@ -2,8 +2,14 @@ export interface Quiz {
   id: string
   title: string
   instructions: string
-  questions: Question[]
-  createdAt: Date
+  createdAt: string
+  questions: {
+    id: string
+    text: string
+    options: string[]
+    order: number
+    correctAns?: string
+  }[]
 }
 
 export interface Question {

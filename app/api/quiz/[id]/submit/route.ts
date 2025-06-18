@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         },
       },
       update: {
-        answers: answers,
+        answers: JSON.stringify(answers),
         score,
         completed: true,
         endedAt: new Date(),
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       create: {
         quizId: params.id,
         studentId,
-        answers: answers,
+        answers: JSON.stringify(answers),
         score,
         completed: true,
         endedAt: new Date(),

@@ -10,6 +10,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
   Plus,
   Trash2,
   Save,
@@ -22,92 +42,16 @@ import {
   ExternalLink,
   RefreshCw,
   BookOpen,
+  Edit,
+  Upload,
+  FileText,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react"
 import type { QuizFormData, Quiz } from "@/types/quiz"
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx"
 
 export default function TeacherDashboard() {
-
-
-const handleExcelUpload = async (file?: File) => {
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const data = new Uint8Array(e.target!.result as ArrayBuffer);
-    const workbook = XLSX.read(data, { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-    if (!jsonData.length) {
-      setSubmitMessage("The Excel sheet is empty or improperly formatted.");
-      return;
-    }
-
-    const firstRow: any = jsonData[0];
-
-    const questions = jsonData.map((row: any, index: number) => {
-      const options = [row["Option A"], row["Option B"], row["Option C"], row["Option D"]].filter(Boolean);
-      return {
-        text: row["Question Text"],
-        options,
-        correctAns: row["Correct Answer"],
-      };
-    });
-
-    const quizPayload = {
-      title: firstRow["Quiz Title"] || "Untitled Quiz",
-      instructions: firstRow["Quiz Instructions"] || "",
-      questions,
-    };
-
-    // Validate structure before upload
-    const error = validateQuizUpload(quizPayload);
-    if (error) {
-      setSubmitMessage(error);
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(quizPayload),
-      });
-
-      const result = await res.json();
-
-      if (res.ok) {
-        setSubmitMessage(`Quiz "${result.title}" uploaded successfully!`);
-        setCreatedQuizId(result.id);
-        if (activeTab === "manage") fetchQuizzes();
-      } else {
-        setSubmitMessage(`Error: ${result.error}`);
-      }
-    } catch (err) {
-      setSubmitMessage("Failed to upload quiz from Excel.");
-    }
-  };
-
-  reader.readAsArrayBuffer(file);
-};
-
-const validateQuizUpload = (quiz: QuizFormData) => {
-  if (!quiz.title || !quiz.instructions) return "Quiz title or instructions missing";
-
-  for (let i = 0; i < quiz.questions.length; i++) {
-    const q = quiz.questions[i];
-    if (!q.text?.trim()) return `Question ${i + 1} is missing text`;
-    if (!q.options || q.options.length < 2) return `Question ${i + 1} must have at least 2 options`;
-    if (!q.correctAns || !q.options.includes(q.correctAns)) {
-      return `Question ${i + 1} has invalid correct answer`;
-    }
-  }
-  return null;
-};
-
-
-
   const [activeTab, setActiveTab] = useState("create")
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [isLoadingQuizzes, setIsLoadingQuizzes] = useState(false)
@@ -125,6 +69,107 @@ const validateQuizUpload = (quiz: QuizFormData) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitMessage, setSubmitMessage] = useState("")
   const [createdQuizId, setCreatedQuizId] = useState<string | null>(null)
+
+  // New state for toggle functionality
+  const [inputMode, setInputMode] = useState<"form" | "upload">("form")
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isFileReady, setIsFileReady] = useState(false)
+
+  // Edit functionality state
+  const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null)
+  const [editQuizData, setEditQuizData] = useState<QuizFormData>({
+    title: "",
+    instructions: "",
+    questions: [],
+  })
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+
+  const handleExcelUpload = async (file?: File) => {
+    if (!file) return
+
+    setUploadedFile(file)
+    setIsFileReady(true)
+    setSubmitMessage(`File "${file.name}" ready for upload. Click "Submit Quiz from File" to process.`)
+  }
+
+  const submitFileUpload = async () => {
+    if (!uploadedFile) return
+
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const data = new Uint8Array(e.target!.result as ArrayBuffer)
+      const workbook = XLSX.read(data, { type: "array" })
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+      const jsonData = XLSX.utils.sheet_to_json(worksheet)
+
+      if (!jsonData.length) {
+        setSubmitMessage("The Excel sheet is empty or improperly formatted.")
+        return
+      }
+
+      const firstRow: any = jsonData[0]
+
+      const questions = jsonData.map((row: any, index: number) => {
+        const options = [row["Option A"], row["Option B"], row["Option C"], row["Option D"]].filter(Boolean)
+        return {
+          text: row["Question Text"],
+          options,
+          correctAns: row["Correct Answer"],
+        }
+      })
+
+      const quizPayload = {
+        title: firstRow["Quiz Title"] || "Untitled Quiz",
+        instructions: firstRow["Quiz Instructions"] || "",
+        questions,
+      }
+
+      // Validate structure before upload
+      const error = validateQuizUpload(quizPayload)
+      if (error) {
+        setSubmitMessage(error)
+        return
+      }
+
+      try {
+        const res = await fetch("/api/quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(quizPayload),
+        })
+
+        const result = await res.json()
+
+        if (res.ok) {
+          setSubmitMessage(`Quiz "${result.title}" uploaded successfully!`)
+          setCreatedQuizId(result.id)
+          setUploadedFile(null)
+          setIsFileReady(false)
+          if (activeTab === "manage") fetchQuizzes()
+        } else {
+          setSubmitMessage(`Error: ${result.error}`)
+        }
+      } catch (err) {
+        setSubmitMessage("Failed to upload quiz from Excel.")
+      }
+    }
+
+    reader.readAsArrayBuffer(uploadedFile)
+  }
+
+  const validateQuizUpload = (quiz: QuizFormData) => {
+    if (!quiz.title || !quiz.instructions) return "Quiz title or instructions missing"
+
+    for (let i = 0; i < quiz.questions.length; i++) {
+      const q = quiz.questions[i]
+      if (!q.text?.trim()) return `Question ${i + 1} is missing text`
+      if (!q.options || q.options.length < 2) return `Question ${i + 1} must have at least 2 options`
+      if (!q.correctAns || !q.options.includes(q.correctAns)) {
+        return `Question ${i + 1} has invalid correct answer`
+      }
+    }
+    return null
+  }
 
   // Fetch quizzes when component mounts or when switching to manage tab
   useEffect(() => {
@@ -150,81 +195,215 @@ const validateQuizUpload = (quiz: QuizFormData) => {
     }
   }
 
-  const addQuestion = () => {
-    setQuiz((prev) => ({
-      ...prev,
-      questions: [
-        ...prev.questions,
-        {
-          text: "",
-          options: ["", ""],
-          correctAns: "",
-        },
-      ],
-    }))
+  // Edit quiz functionality
+  const handleEditQuiz = (quiz: Quiz) => {
+    setEditingQuiz(quiz)
+    setEditQuizData({
+      title: quiz.title,
+      instructions: quiz.instructions,
+      questions: quiz.questions.map((q) => ({
+        text: q.text,
+        options: q.options,
+        correctAns: q.correctAns || "",
+      })),
+    })
+    setIsEditDialogOpen(true)
   }
 
-  const removeQuestion = (index: number) => {
-    if (quiz.questions.length > 1) {
+  const handleUpdateQuiz = async () => {
+    if (!editingQuiz) return
+
+    const error = validateQuiz(editQuizData)
+    if (error) {
+      setSubmitMessage(error)
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`/api/quiz/${editingQuiz.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editQuizData),
+      })
+
+      if (response.ok) {
+        setSubmitMessage("Quiz updated successfully!")
+        setIsEditDialogOpen(false)
+        setEditingQuiz(null)
+        fetchQuizzes()
+      } else {
+        const error = await response.json()
+        setSubmitMessage(`Error: ${error.error}`)
+      }
+    } catch (error) {
+      setSubmitMessage("Failed to update quiz. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Delete quiz functionality
+  const handleDeleteQuiz = async (quizId: string) => {
+    try {
+      const response = await fetch(`/api/quiz/${quizId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        setSubmitMessage("Quiz deleted successfully!")
+        fetchQuizzes()
+      } else {
+        const error = await response.json()
+        setSubmitMessage(`Error: ${error.error}`)
+      }
+    } catch (error) {
+      setSubmitMessage("Failed to delete quiz. Please try again.")
+    }
+  }
+
+  const addQuestion = (isEdit = false) => {
+    const newQuestion = {
+      text: "",
+      options: ["", ""],
+      correctAns: "",
+    }
+
+    if (isEdit) {
+      setEditQuizData((prev) => ({
+        ...prev,
+        questions: [...prev.questions, newQuestion],
+      }))
+    } else {
       setQuiz((prev) => ({
         ...prev,
-        questions: prev.questions.filter((_, i) => i !== index),
+        questions: [...prev.questions, newQuestion],
       }))
     }
   }
 
-  const updateQuestion = (index: number, field: string, value: string) => {
-    setQuiz((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) => (i === index ? { ...q, [field]: value } : q)),
-    }))
+  const removeQuestion = (index: number, isEdit = false) => {
+    const currentQuestions = isEdit ? editQuizData.questions : quiz.questions
+    if (currentQuestions.length > 1) {
+      if (isEdit) {
+        setEditQuizData((prev) => ({
+          ...prev,
+          questions: prev.questions.filter((_, i) => i !== index),
+        }))
+      } else {
+        setQuiz((prev) => ({
+          ...prev,
+          questions: prev.questions.filter((_, i) => i !== index),
+        }))
+      }
+    }
   }
 
-  const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
-    setQuiz((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) =>
-        i === questionIndex
-          ? {
-            ...q,
-            options: q.options.map((opt, j) => (j === optionIndex ? value : opt)),
-          }
-          : q,
-      ),
-    }))
+  const updateQuestion = (index: number, field: string, value: string, isEdit = false) => {
+    if (isEdit) {
+      setEditQuizData((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q, i) => (i === index ? { ...q, [field]: value } : q)),
+      }))
+    } else {
+      setQuiz((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q, i) => (i === index ? { ...q, [field]: value } : q)),
+      }))
+    }
   }
 
-  const addOption = (questionIndex: number) => {
-    setQuiz((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) =>
-        i === questionIndex && q.options.length < 4 ? { ...q, options: [...q.options, ""] } : q,
-      ),
-    }))
+  const updateOption = (questionIndex: number, optionIndex: number, value: string, isEdit = false) => {
+    if (isEdit) {
+      setEditQuizData((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q, i) =>
+          i === questionIndex
+            ? {
+                ...q,
+                options: q.options.map((opt, j) => (j === optionIndex ? value : opt)),
+              }
+            : q,
+        ),
+      }))
+    } else {
+      setQuiz((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q, i) =>
+          i === questionIndex
+            ? {
+                ...q,
+                options: q.options.map((opt, j) => (j === optionIndex ? value : opt)),
+              }
+            : q,
+        ),
+      }))
+    }
   }
 
-  const removeOption = (questionIndex: number, optionIndex: number) => {
-    setQuiz((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) =>
-        i === questionIndex && q.options.length > 2
-          ? {
-            ...q,
-            options: q.options.filter((_, j) => j !== optionIndex),
-            correctAns: q.correctAns === q.options[optionIndex] ? "" : q.correctAns,
-          }
-          : q,
-      ),
-    }))
+  const addOption = (questionIndex: number, isEdit = false) => {
+    const currentQuestions = isEdit ? editQuizData.questions : quiz.questions
+    const currentQuestion = currentQuestions[questionIndex]
+
+    if (currentQuestion.options.length < 4) {
+      if (isEdit) {
+        setEditQuizData((prev) => ({
+          ...prev,
+          questions: prev.questions.map((q, i) => (i === questionIndex ? { ...q, options: [...q.options, ""] } : q)),
+        }))
+      } else {
+        setQuiz((prev) => ({
+          ...prev,
+          questions: prev.questions.map((q, i) => (i === questionIndex ? { ...q, options: [...q.options, ""] } : q)),
+        }))
+      }
+    }
   }
 
-  const validateQuiz = () => {
-    if (!quiz.title.trim() || !quiz.instructions.trim()) {
+  const removeOption = (questionIndex: number, optionIndex: number, isEdit = false) => {
+    const currentQuestions = isEdit ? editQuizData.questions : quiz.questions
+    const currentQuestion = currentQuestions[questionIndex]
+
+    if (currentQuestion.options.length > 2) {
+      if (isEdit) {
+        setEditQuizData((prev) => ({
+          ...prev,
+          questions: prev.questions.map((q, i) =>
+            i === questionIndex
+              ? {
+                  ...q,
+                  options: q.options.filter((_, j) => j !== optionIndex),
+                  correctAns: q.correctAns === q.options[optionIndex] ? "" : q.correctAns,
+                }
+              : q,
+          ),
+        }))
+      } else {
+        setQuiz((prev) => ({
+          ...prev,
+          questions: prev.questions.map((q, i) =>
+            i === questionIndex
+              ? {
+                  ...q,
+                  options: q.options.filter((_, j) => j !== optionIndex),
+                  correctAns: q.correctAns === q.options[optionIndex] ? "" : q.correctAns,
+                }
+              : q,
+          ),
+        }))
+      }
+    }
+  }
+
+  const validateQuiz = (quizData = quiz) => {
+    if (!quizData.title.trim() || !quizData.instructions.trim()) {
       return "Please fill in quiz title and instructions"
     }
 
-    for (let i = 0; i < quiz.questions.length; i++) {
-      const question = quiz.questions[i]
+    for (let i = 0; i < quizData.questions.length; i++) {
+      const question = quizData.questions[i]
 
       if (!question.text.trim()) {
         return `Question ${i + 1}: Please enter question text`
@@ -432,10 +611,276 @@ const validateQuizUpload = (quiz: QuizFormData) => {
               Preview
             </Button>
           </div>
+
+          <div className="flex gap-2 pt-2 border-t">
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => handleEditQuiz(quiz)} variant="outline" size="sm" className="flex-1">
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Edit Quiz</DialogTitle>
+                  <DialogDescription>Make changes to your quiz. Click save when you're done.</DialogDescription>
+                </DialogHeader>
+
+                {editingQuiz && (
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="edit-title">Quiz Title</Label>
+                        <Input
+                          id="edit-title"
+                          value={editQuizData.title}
+                          onChange={(e) => setEditQuizData((prev) => ({ ...prev, title: e.target.value }))}
+                          placeholder="Enter quiz title"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="edit-instructions">Instructions</Label>
+                        <Textarea
+                          id="edit-instructions"
+                          value={editQuizData.instructions}
+                          onChange={(e) => setEditQuizData((prev) => ({ ...prev, instructions: e.target.value }))}
+                          placeholder="Enter quiz instructions for students"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold">Questions</h4>
+                        <Button type="button" onClick={() => addQuestion(true)} variant="outline" size="sm">
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Question
+                        </Button>
+                      </div>
+
+                      {editQuizData.questions.map((question, questionIndex) => (
+                        <Card key={questionIndex} className="border-l-4 border-l-blue-500">
+                          <CardHeader className="pb-4">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">Question {questionIndex + 1}</CardTitle>
+                              {editQuizData.questions.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => removeQuestion(questionIndex, true)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div>
+                              <Label>Question Text</Label>
+                              <Textarea
+                                value={question.text}
+                                onChange={(e) => updateQuestion(questionIndex, "text", e.target.value, true)}
+                                placeholder="Enter your question"
+                                rows={2}
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <Label>Options (2-4 options)</Label>
+                                {question.options.length < 4 && (
+                                  <Button
+                                    type="button"
+                                    onClick={() => addOption(questionIndex, true)}
+                                    variant="outline"
+                                    size="sm"
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    Add Option
+                                  </Button>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                {question.options.map((option, optionIndex) => (
+                                  <div key={optionIndex} className="flex items-center gap-2">
+                                    <Input
+                                      value={option}
+                                      onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value, true)}
+                                      placeholder={`Option ${optionIndex + 1}`}
+                                    />
+                                    {question.options.length > 2 && (
+                                      <Button
+                                        type="button"
+                                        onClick={() => removeOption(questionIndex, optionIndex, true)}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-red-500 hover:text-red-700"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <Label>Correct Answer</Label>
+                              <select
+                                value={question.correctAns}
+                                onChange={(e) => updateQuestion(questionIndex, "correctAns", e.target.value, true)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                              >
+                                <option value="">Select correct answer</option>
+                                {question.options
+                                  .filter((opt) => opt.trim())
+                                  .map((option, index) => (
+                                    <option key={index} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleUpdateQuiz} disabled={isSubmitting}>
+                    <Save className="w-4 h-4 mr-2" />
+                    {isSubmitting ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" className="flex-1">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the quiz "{quiz.title}" and all its
+                    questions.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleDeleteQuiz(quiz.id)} className="bg-red-600 hover:bg-red-700">
+                    Delete Quiz
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </CardContent>
       </Card>
     )
   }
+
+  const renderQuestionForm = (question: any, questionIndex: number, isEdit = false) => (
+    <Card key={questionIndex} className="border-l-4 border-l-blue-500">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Question {questionIndex + 1}</CardTitle>
+          {(isEdit ? editQuizData.questions.length : quiz.questions.length) > 1 && (
+            <Button
+              type="button"
+              onClick={() => removeQuestion(questionIndex, isEdit)}
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label>Question Text</Label>
+          <Textarea
+            value={question.text}
+            onChange={(e) => updateQuestion(questionIndex, "text", e.target.value, isEdit)}
+            placeholder="Enter your question"
+            rows={2}
+            required
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <Label>Options (2-4 options)</Label>
+            {question.options.length < 4 && (
+              <Button type="button" onClick={() => addOption(questionIndex, isEdit)} variant="outline" size="sm">
+                <Plus className="w-3 h-3 mr-1" />
+                Add Option
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {question.options.map((option: string, optionIndex: number) => (
+              <div key={optionIndex} className="flex items-center gap-2">
+                <Input
+                  value={option}
+                  onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value, isEdit)}
+                  placeholder={`Option ${optionIndex + 1}`}
+                  required
+                />
+                {question.options.length > 2 && (
+                  <Button
+                    type="button"
+                    onClick={() => removeOption(questionIndex, optionIndex, isEdit)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <Label>Correct Answer</Label>
+          <select
+            value={question.correctAns}
+            onChange={(e) => updateQuestion(questionIndex, "correctAns", e.target.value, isEdit)}
+            className="w-full p-2 border border-gray-300 rounded-md"
+            required
+          >
+            <option value="">Select correct answer</option>
+            {question.options
+              .filter((opt: string) => opt.trim())
+              .map((option: string, index: number) => (
+                <option key={index} value={option}>
+                  {option}
+                </option>
+              ))}
+          </select>
+        </div>
+      </CardContent>
+    </Card>
+  )
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -448,182 +893,175 @@ const validateQuizUpload = (quiz: QuizFormData) => {
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="create">Create Quiz</TabsTrigger>
           <TabsTrigger value="manage">Manage Quizzes</TabsTrigger>
-          
-
         </TabsList>
-
 
         <TabsContent value="create" className="space-y-6">
           {createdQuizId && <QuizSuccessCard quizId={createdQuizId} title={quiz.title || "Untitled Quiz"} />}
 
-          <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold">Teacher Dashboard</h1>
-              <p className="text-gray-600">Create and manage secure quizzes or upload Excel files</p>
-            </div>
-            <Input
-              type="file"
-              accept=".xlsx"
-              onChange={(e) => handleExcelUpload(e.target.files?.[0])}
-              className="w-full max-w-xs"
-            />
-          </div>
-
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Create New Quiz</CardTitle>
-              <CardDescription>
-                Design a secure quiz with multiple-choice questions. Each question will have a 1-minute timer.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Quiz Metadata */}
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="title">Quiz Title</Label>
-                    <Input
-                      id="title"
-                      value={quiz.title}
-                      onChange={(e) => setQuiz((prev) => ({ ...prev, title: e.target.value }))}
-                      placeholder="Enter quiz title"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="instructions">Instructions</Label>
-                    <Textarea
-                      id="instructions"
-                      value={quiz.instructions}
-                      onChange={(e) => setQuiz((prev) => ({ ...prev, instructions: e.target.value }))}
-                      placeholder="Enter quiz instructions for students"
-                      rows={3}
-                      required
-                    />
-                  </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl">Create New Quiz</CardTitle>
+                  <CardDescription>
+                    Design a secure quiz with multiple-choice questions or upload from Excel file.
+                  </CardDescription>
                 </div>
 
-                {/* Questions */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Questions</h3>
-                    <Button type="button" onClick={addQuestion} variant="outline" size="sm">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Question
-                    </Button>
-                  </div>
-
-                  {quiz.questions.map((question, questionIndex) => (
-                    <Card key={questionIndex} className="border-l-4 border-l-blue-500">
-                      <CardHeader className="pb-4">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">Question {questionIndex + 1}</CardTitle>
-                          {quiz.questions.length > 1 && (
-                            <Button
-                              type="button"
-                              onClick={() => removeQuestion(questionIndex)}
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <Label>Question Text</Label>
-                          <Textarea
-                            value={question.text}
-                            onChange={(e) => updateQuestion(questionIndex, "text", e.target.value)}
-                            placeholder="Enter your question"
-                            rows={2}
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <Label>Options (2-4 options)</Label>
-                            {question.options.length < 4 && (
-                              <Button
-                                type="button"
-                                onClick={() => addOption(questionIndex)}
-                                variant="outline"
-                                size="sm"
-                              >
-                                <Plus className="w-3 h-3 mr-1" />
-                                Add Option
-                              </Button>
-                            )}
-                          </div>
-
-                          <div className="space-y-2">
-                            {question.options.map((option, optionIndex) => (
-                              <div key={optionIndex} className="flex items-center gap-2">
-                                <Input
-                                  value={option}
-                                  onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value)}
-                                  placeholder={`Option ${optionIndex + 1}`}
-                                  required
-                                />
-                                {question.options.length > 2 && (
-                                  <Button
-                                    type="button"
-                                    onClick={() => removeOption(questionIndex, optionIndex)}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-500 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label>Correct Answer</Label>
-                          <select
-                            value={question.correctAns}
-                            onChange={(e) => updateQuestion(questionIndex, "correctAns", e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-md"
-                            required
-                          >
-                            <option value="">Select correct answer</option>
-                            {question.options
-                              .filter((opt) => opt.trim())
-                              .map((option, index) => (
-                                <option key={index} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                {submitMessage && (
-                  <div
-                    className={`p-3 rounded-md ${submitMessage.includes("Error") || submitMessage.includes("Please")
-                        ? "bg-red-50 text-red-700 border border-red-200"
-                        : "bg-green-50 text-green-700 border border-green-200"
-                      }`}
+                {/* Toggle Button */}
+                <div className="flex items-center gap-2">
+                  <FileText className={`w-4 h-4 ${inputMode === "form" ? "text-blue-600" : "text-gray-400"}`} />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setInputMode(inputMode === "form" ? "upload" : "form")
+                      setSubmitMessage("")
+                      setUploadedFile(null)
+                      setIsFileReady(false)
+                    }}
+                    className="p-1"
                   >
-                    {submitMessage}
-                  </div>
-                )}
+                    {inputMode === "form" ? (
+                      <ToggleLeft className="w-6 h-6 text-gray-400" />
+                    ) : (
+                      <ToggleRight className="w-6 h-6 text-blue-600" />
+                    )}
+                  </Button>
+                  <Upload className={`w-4 h-4 ${inputMode === "upload" ? "text-blue-600" : "text-gray-400"}`} />
+                </div>
+              </div>
 
-                <Button type="submit" disabled={isSubmitting} className="w-full">
-                  <Save className="w-4 h-4 mr-2" />
-                  {isSubmitting ? "Creating Quiz..." : "Create Quiz"}
-                </Button>
-              </form>
+              <div className="text-sm text-gray-600">
+                {inputMode === "form" ? "Using Form Input" : "Using File Upload"}
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {inputMode === "form" ? (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Quiz Metadata */}
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="title">Quiz Title</Label>
+                      <Input
+                        id="title"
+                        value={quiz.title}
+                        onChange={(e) => setQuiz((prev) => ({ ...prev, title: e.target.value }))}
+                        placeholder="Enter quiz title"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="instructions">Instructions</Label>
+                      <Textarea
+                        id="instructions"
+                        value={quiz.instructions}
+                        onChange={(e) => setQuiz((prev) => ({ ...prev, instructions: e.target.value }))}
+                        placeholder="Enter quiz instructions for students"
+                        rows={3}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Questions */}
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Questions</h3>
+                      <Button type="button" onClick={() => addQuestion()} variant="outline" size="sm">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Question
+                      </Button>
+                    </div>
+
+                    {quiz.questions.map((question, questionIndex) =>
+                      renderQuestionForm(question, questionIndex, false),
+                    )}
+                  </div>
+
+                  {submitMessage && (
+                    <div
+                      className={`p-3 rounded-md ${
+                        submitMessage.includes("Error") || submitMessage.includes("Please")
+                          ? "bg-red-50 text-red-700 border border-red-200"
+                          : "bg-green-50 text-green-700 border border-green-200"
+                      }`}
+                    >
+                      {submitMessage}
+                    </div>
+                  )}
+
+                  <Button type="submit" disabled={isSubmitting} className="w-full">
+                    <Save className="w-4 h-4 mr-2" />
+                    {isSubmitting ? "Creating Quiz..." : "Create Quiz"}
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-6">
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Upload Excel File</h3>
+                    <p className="text-gray-600 mb-4">Select an Excel file (.xlsx) containing your quiz questions</p>
+                    <Input
+                      type="file"
+                      accept=".xlsx"
+                      onChange={(e) => handleExcelUpload(e.target.files?.[0])}
+                      className="max-w-xs mx-auto"
+                    />
+                  </div>
+
+                  {uploadedFile && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="w-5 h-5 text-blue-600" />
+                        <span className="font-medium text-blue-800">File Ready</span>
+                      </div>
+                      <p className="text-blue-700 mb-4">File "{uploadedFile.name}" is ready to be processed.</p>
+                      <Button onClick={submitFileUpload} disabled={!isFileReady} className="w-full">
+                        <Upload className="w-4 h-4 mr-2" />
+                        Submit Quiz from File
+                      </Button>
+                    </div>
+                  )}
+
+                  {submitMessage && (
+                    <div
+                      className={`p-3 rounded-md ${
+                        submitMessage.includes("Error") || submitMessage.includes("Please")
+                          ? "bg-red-50 text-red-700 border border-red-200"
+                          : "bg-green-50 text-green-700 border border-green-200"
+                      }`}
+                    >
+                      {submitMessage}
+                    </div>
+                  )}
+
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-medium mb-2">Excel File Format:</h4>
+                    <p className="text-sm text-gray-600 mb-2">Your Excel file should have the following columns:</p>
+                    <ul className="text-sm text-gray-600 space-y-1">
+                      <li>
+                        • <strong>Quiz Title</strong> (first row only)
+                      </li>
+                      <li>
+                        • <strong>Quiz Instructions</strong> (first row only)
+                      </li>
+                      <li>
+                        • <strong>Question Text</strong>
+                      </li>
+                      <li>
+                        • <strong>Option A</strong>, <strong>Option B</strong>, <strong>Option C</strong>,{" "}
+                        <strong>Option D</strong>
+                      </li>
+                      <li>
+                        • <strong>Correct Answer</strong>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -639,6 +1077,18 @@ const validateQuizUpload = (quiz: QuizFormData) => {
               Refresh
             </Button>
           </div>
+
+          {submitMessage && (
+            <div
+              className={`p-3 rounded-md ${
+                submitMessage.includes("Error")
+                  ? "bg-red-50 text-red-700 border border-red-200"
+                  : "bg-green-50 text-green-700 border border-green-200"
+              }`}
+            >
+              {submitMessage}
+            </div>
+          )}
 
           {isLoadingQuizzes ? (
             <div className="flex items-center justify-center py-12">
@@ -673,3 +1123,5 @@ const validateQuizUpload = (quiz: QuizFormData) => {
     </div>
   )
 }
+
+
