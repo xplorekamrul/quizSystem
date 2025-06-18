@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Quiz {
+  id           String     @id @default(cuid())
+  title        String
+  instructions String
+  questions    Question[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Question {
+  id         String   @id @default(cuid())
+  quizId     String
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text       String
+  options    String[] // 2–4 options
+  correctAns String
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+}
+
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  quizId    String
+  studentId String
+  answers   Json     // Store answers as JSON
+  score     Int?
+  completed Boolean  @default(false)
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  
+  @@unique([quizId, studentId])
+}
