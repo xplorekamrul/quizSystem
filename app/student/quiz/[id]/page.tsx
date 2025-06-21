@@ -240,7 +240,7 @@ export default function StudentQuiz() {
 
   if (isQuizCompleted && quizResult) {
     return (
-      <div className="container mx-auto p-6 max-w-2xl">
+      <div className="container mx-auto p-6 max-w-2xl space-y-6">
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-green-600">Quiz Completed!</CardTitle>
@@ -257,8 +257,42 @@ export default function StudentQuiz() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Review block moved here */}
+        <div className="space-y-6 text-left mt-6">
+          <h2 className="text-lg font-semibold">Review Your Answers</h2>
+          {quizResult.details.map((item: any, idx: number) => (
+            <div key={idx} className="border p-4 rounded-lg bg-gray-50">
+              <p className="mb-2 font-medium">Q{idx + 1}: {item.question}</p>
+              <ul className="space-y-1 text-sm">
+                {item.options.map((opt: string, i: number) => {
+                  const isCorrect = opt === item.correctAnswer;
+                  const isSelected = opt === item.studentAnswer;
+
+                  return (
+                    <li
+                      key={i}
+                      className={`p-2 rounded-md border ${isCorrect
+                          ? "bg-green-100 border-green-400"
+                          : isSelected
+                            ? "bg-red-100 border-red-400"
+                            : "border-gray-200"
+                        }`}
+                    >
+                      {opt}
+                      {isCorrect && <span className="ml-2 text-green-600 font-semibold">(Correct)</span>}
+                      {isSelected && !isCorrect && (
+                        <span className="ml-2 text-red-600">(Your Answer)</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
-    )
+    );
   }
 
   if (!isQuizStarted) {
@@ -342,9 +376,8 @@ export default function StudentQuiz() {
             {currentQuestion.options.map((option, index) => (
               <label
                 key={index}
-                className={`flex items-center p-4 border rounded-lg cursor-pointer transition-colors ${
-                  selectedAnswer === option ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                }`}
+                className={`flex items-center p-4 border rounded-lg cursor-pointer transition-colors ${selectedAnswer === option ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                  }`}
               >
                 <input
                   type="radio"
@@ -370,6 +403,7 @@ export default function StudentQuiz() {
           </div>
         </CardContent>
       </Card>
+
     </div>
   )
 }

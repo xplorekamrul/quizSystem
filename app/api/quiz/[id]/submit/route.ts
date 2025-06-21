@@ -24,18 +24,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 })
     }
 
-    // Calculate score
+    // Map answers by questionId for quick lookup
+    const answerMap = Object.fromEntries(answers.map((a) => [a.questionId, a]))
+
     let score = 0
+    const details = quiz.questions.map((q: {
+      id: string;
+      text: string;
+      options: string[];
+      correctAns: string;
+    }) => {
+      const studentAnswer = answerMap[q.id]
+      const isCorrect = studentAnswer?.answer === q.correctAns
+      if (isCorrect) score++
+
+      return {
+        questionId: q.id,
+        question: q.text,
+        options: q.options,
+        correctAnswer: q.correctAns,
+        studentAnswer: studentAnswer?.answer ?? null,
+        isCorrect,
+      }
+    })
+
     const totalQuestions = quiz.questions.length
 
-    for (const answer of answers) {
-      const question = quiz.questions.find((q: any) => q.id === answer.questionId)
-      if (question && question.correctAns === answer.answer) {
-        score++
-      }
-    }
-
-    // Save quiz attempt
+    // Save attempt
     const attempt = await prisma.quizAttempt.upsert({
       where: {
         quizId_studentId: {
@@ -63,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       score,
       totalQuestions,
       percentage: Math.round((score / totalQuestions) * 100),
-      attempt,
+      details,
     })
   } catch (error) {
     console.error("Error submitting quiz:", error)
