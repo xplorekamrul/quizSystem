@@ -1,11 +1,12 @@
-Copyright © 2025 [Md Kamruzzaman]
-
+Proprietary License
+Copyright © 2025 Md Kamruzzaman  
 All rights reserved.
 
 This software and associated documentation files (the "Software") are the exclusive property of the copyright holder.
 
-Permission is not granted to any person to use, copy, modify, merge, publish, distribute, sublicense, or sell copies of the Software, or to permit persons to whom the Software is furnished to do so, without express written permission from the copyright holder.
+No permission is granted to any person or entity to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, or to permit others to do so, without the express prior written permission of the copyright holder.
 
-Unauthorized use of this software is strictly prohibited.
+Any unauthorized use of this Software, in whole or in part, is strictly prohibited and may result in civil and/or criminal penalties under applicable laws.
 
-For licensing inquiries, please contact: [mdkamruzzaman099826@gmail.com]
+For licensing inquiries, please contact:  
+📧 mdkamruzzaman099826@gmail.com
